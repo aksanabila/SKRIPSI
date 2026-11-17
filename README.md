@@ -1,0 +1,2 @@
+# SKRIPSI
+simulasi numerik
