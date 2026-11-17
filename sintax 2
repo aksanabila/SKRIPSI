@@ -1,0 +1,78 @@
+clc;
+clear;
+close all;
+
+% Nilai parameter (estimasi awal)
+Pi = 1430;
+beta = 1e-5;
+q = 0.5;
+mu = 0.0143;
+lambda = 0.2;
+gamma = 2.0;
+delta = 2.0;
+rho = 0.85;
+eta1 = 0.01;
+eta2 = 0.005;
+
+% Kondisi awal [S; E; I; T; R]
+x0 = [99500; 200; 150; 100; 50];
+
+% Fungsi sistem persamaan diferensial
+f = @(x) [
+    Pi - beta*x(1)*(x(3)+q*x(4)) - mu*x(1);
+    beta*x(1)*(x(3)+q*x(4)) + (1-rho)*delta*x(4) ...
+        - (mu+lambda)*x(2);
+    lambda*x(2) - (mu+eta1+gamma)*x(3);
+    gamma*x(3) - (mu+eta2+delta)*x(4);
+    rho*delta*x(4) - mu*x(5)
+];
+
+% Interval dan ukuran langkah
+h = 0.01;
+Takhir = 10;
+t = 0:h:Takhir;
+Nt = length(t)-1;
+
+% Inisialisasi
+X = zeros(5,Nt+1);
+F = zeros(5,Nt+1);
+X(:,1) = x0;
+
+% Tiga langkah awal menggunakan RK4
+for k = 1:3
+    k1 = f(X(:,k));
+    k2 = f(X(:,k)+h*k1/2);
+    k3 = f(X(:,k)+h*k2/2);
+    k4 = f(X(:,k)+h*k3);
+
+    X(:,k+1) = X(:,k) + ...
+        h*(k1+2*k2+2*k3+k4)/6;
+
+    F(:,k) = f(X(:,k));
+end
+
+F(:,4) = f(X(:,4));
+
+% Perhitungan Adams-Bashforth orde 4
+for k = 4:Nt
+    X(:,k+1) = X(:,k) + (h/24)*( ...
+        55*F(:,k) - 59*F(:,k-1) + ...
+        37*F(:,k-2) - 9*F(:,k-3));
+
+    F(:,k+1) = f(X(:,k+1));
+end
+
+% Menampilkan grafik
+figure;
+plot(t,X(1,:),'LineWidth',1.5);
+hold on;
+plot(t,X(2,:),'LineWidth',1.5);
+plot(t,X(3,:),'LineWidth',1.5);
+plot(t,X(4,:),'LineWidth',1.5);
+plot(t,X(5,:),'LineWidth',1.5);
+
+xlabel('Waktu (tahun)');
+ylabel('Jumlah Individu');
+legend('S','E','I','T','R');
+title('Simulasi Model Penyebaran TB');
+grid on;
