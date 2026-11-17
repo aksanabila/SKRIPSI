@@ -1,0 +1,219 @@
+
+clc;
+clear;
+close all;
+
+%% =========================================================
+%  SIMULASI MODEL PENYEBARAN TB DENGAN PENGOBATAN TIDAK LENGKAP
+%  METODE ADAMS-BASHFORTH ORDE 4
+%  Alur pengobatan tidak lengkap: T -> E
+%% =========================================================
+
+%% 1. MENENTUKAN NILAI PARAMETER
+
+% Nilai berikut merupakan estimasi awal untuk contoh simulasi.
+% Ganti dengan nilai parameter hasil penelitian.
+
+Pi      = 1430;       % Laju rekrutmen (individu/tahun)
+beta    = 1e-5;       % Laju penularan
+q       = 0.5;        % Faktor penularan relatif
+mu      = 0.0143;     % Laju kematian alami
+lambda  = 0.2;        % Laju perkembangan E ke I
+gamma   = 2.0;        % Laju masuk pengobatan
+delta   = 2.0;        % Laju keluar dari pengobatan
+rho     = 0.85;       % Proporsi keberhasilan pengobatan
+eta1    = 0.01;       % Kematian akibat TB pada I
+eta2    = 0.005;      % Kematian akibat TB pada T
+
+%% 2. MENENTUKAN KONDISI AWAL
+
+% Urutan variabel: [S; E; I; T; R]
+
+S0 = 99500;
+E0 = 200;
+I0 = 150;
+T0 = 100;
+R0_awal = 50;
+
+x0 = [S0; E0; I0; T0; R0_awal];
+
+% Jumlah populasi awal
+N0 = sum(x0);
+
+%% 3. MENENTUKAN BILANGAN REPRODUKSI DASAR
+
+a = mu + lambda;
+b = mu + eta1 + gamma;
+c = mu + eta2 + delta;
+d = (1-rho)*delta;
+
+H = a*b*c - lambda*d*gamma;
+
+R0 = (beta*Pi*lambda*(c+q*gamma))/(mu*H);
+
+fprintf('Jumlah populasi awal = %.0f individu\n',N0);
+fprintf('Bilangan reproduksi dasar R0 = %.6f\n',R0);
+
+if R0 < 1
+    fprintf('R0 < 1: penyakit tidak dapat mempertahankan penyebarannya.\n');
+elseif R0 > 1
+    fprintf('R0 > 1: penyakit berpotensi menyebar dalam populasi.\n');
+else
+    fprintf('R0 = 1: kondisi ambang penyebaran penyakit.\n');
+end
+
+%% 4. MENDEFINISIKAN SISTEM PERSAMAAN DIFERENSIAL
+
+% x(1) = S
+% x(2) = E
+% x(3) = I
+% x(4) = T
+% x(5) = R
+
+f = @(x) [
+    Pi - beta*x(1)*(x(3)+q*x(4)) - mu*x(1);
+
+    beta*x(1)*(x(3)+q*x(4)) ...
+    + (1-rho)*delta*x(4) ...
+    - (mu+lambda)*x(2);
+
+    lambda*x(2) ...
+    - (mu+eta1+gamma)*x(3);
+
+    gamma*x(3) ...
+    - (mu+eta2+delta)*x(4);
+
+    rho*delta*x(4) - mu*x(5)
+];
+
+%% 5. MENENTUKAN INTERVAL DAN LANGKAH WAKTU
+
+h = 0.01;          % Ukuran langkah waktu (tahun)
+Takhir = 10;       % Waktu akhir simulasi (tahun)
+
+t = 0:h:Takhir;
+Nt = length(t)-1;
+
+%% 6. INISIALISASI MATRIKS SOLUSI
+
+X = zeros(5,Nt+1);
+F = zeros(5,Nt+1);
+
+X(:,1) = x0;
+
+%% 7. MENGHITUNG TIGA NILAI AWAL DENGAN RK4
+
+for k = 1:3
+
+    k1 = f(X(:,k));
+
+    k2 = f(X(:,k) + (h/2)*k1);
+
+    k3 = f(X(:,k) + (h/2)*k2);
+
+    k4 = f(X(:,k) + h*k3);
+
+    X(:,k+1) = X(:,k) ...
+        + (h/6)*(k1 + 2*k2 + 2*k3 + k4);
+
+    F(:,k) = f(X(:,k));
+
+end
+
+F(:,4) = f(X(:,4));
+
+%% 8. PERHITUNGAN MENGGUNAKAN ADAMS-BASHFORTH ORDE 4
+
+for k = 4:Nt
+
+    X(:,k+1) = X(:,k) + (h/24)*( ...
+        55*F(:,k) ...
+        - 59*F(:,k-1) ...
+        + 37*F(:,k-2) ...
+        - 9*F(:,k-3));
+
+    F(:,k+1) = f(X(:,k+1));
+
+end
+
+%% 9. MENAMPILKAN TABEL HASIL SIMULASI
+
+% Mengambil hasil pada setiap tahun
+tahun = 0:1:Takhir;
+indeks = round(tahun/h) + 1;
+
+hasil = X(:,indeks)';
+
+Tabel_Hasil = table( ...
+    tahun', ...
+    hasil(:,1), ...
+    hasil(:,2), ...
+    hasil(:,3), ...
+    hasil(:,4), ...
+    hasil(:,5), ...
+    'VariableNames', ...
+    {'Waktu','S','E','I','T','R'});
+
+disp(' ');
+disp('TABEL HASIL SIMULASI NUMERIK');
+disp(Tabel_Hasil);
+
+% Menyimpan hasil ke file Excel
+writetable(Tabel_Hasil,'Hasil_Simulasi_TB.xlsx');
+
+%% 10. GRAFIK SELURUH KOMPARTEMEN
+
+figure;
+
+plot(t,X(1,:),'LineWidth',1.5);
+hold on;
+plot(t,X(2,:),'LineWidth',1.5);
+plot(t,X(3,:),'LineWidth',1.5);
+plot(t,X(4,:),'LineWidth',1.5);
+plot(t,X(5,:),'LineWidth',1.5);
+
+xlabel('Waktu (tahun)');
+ylabel('Jumlah Individu');
+title('Simulasi Model Penyebaran TB dengan Pengobatan Tidak Lengkap');
+
+legend('Rentan (S)', ...
+       'Terpapar (E)', ...
+       'Terinfeksi (I)', ...
+       'Pengobatan (T)', ...
+       'Sembuh (R)', ...
+       'Location','best');
+
+grid on;
+hold off;
+
+%% 11. GRAFIK KOMPATEMEN TERPAPAR DAN TERINFEKSI
+
+figure;
+
+plot(t,X(2,:),'LineWidth',1.5);
+hold on;
+plot(t,X(3,:),'LineWidth',1.5);
+plot(t,X(4,:),'LineWidth',1.5);
+
+xlabel('Waktu (tahun)');
+ylabel('Jumlah Individu');
+title('Dinamika Individu Terpapar, Terinfeksi, dan Pengobatan');
+
+legend('Terpapar (E)', ...
+       'Terinfeksi (I)', ...
+       'Pengobatan (T)', ...
+       'Location','best');
+
+grid on;
+hold off;
+
+%% 12. MENAMPILKAN NILAI AKHIR SETIAP KOMPARTEMEN
+
+fprintf('\nHASIL SIMULASI PADA TAHUN KE-%g\n',Takhir);
+fprintf('S = %.6f individu\n',X(1,end));
+fprintf('E = %.6f individu\n',X(2,end));
+fprintf('I = %.6f individu\n',X(3,end));
+fprintf('T = %.6f individu\n',X(4,end));
+fprintf('R = %.6f individu\n',X(5,end));
+
+fprintf('\nSimulasi selesai.\n');
